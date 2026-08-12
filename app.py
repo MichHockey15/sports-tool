@@ -3,40 +3,21 @@ import requests
 
 st.set_page_config(
     page_title="Sports Tool",
-    layout="centered",          # better for phones
+    layout="centered",
     initial_sidebar_state="collapsed"
 )
 
-# Make text bigger and more readable on mobile
 st.markdown("""
     <style>
-        .stApp {
-            max-width: 100%;
-        }
-        h1 {
-            font-size: 1.8rem !important;
-            margin-bottom: 0.3rem !important;
-        }
-        h3 {
-            font-size: 1.3rem !important;
-            margin-top: 1.2rem !important;
-            margin-bottom: 0.3rem !important;
-        }
-        p, div {
-            font-size: 1.05rem !important;
-        }
-        .stCaption {
-            font-size: 0.95rem !important;
-        }
-        .block-container {
-            padding-top: 1.5rem !important;
-            padding-bottom: 2rem !important;
-        }
+        h1 { font-size: 1.8rem !important; }
+        h3 { font-size: 1.25rem !important; margin-top: 1.1rem !important; }
+        p, div { font-size: 1.05rem !important; }
+        .block-container { padding-top: 1.2rem !important; }
     </style>
 """, unsafe_allow_html=True)
 
 st.title("Sports Tool")
-st.caption("NFL + College Football • Best Odds")
+st.caption("NFL + College Football • Best Odds + Weather")
 
 API_KEY = st.secrets["API_KEY"]
 
@@ -59,13 +40,44 @@ def get_odds(sport_key):
         return None
     return r.json()
 
+def get_weather_for_team(team_name):
+    """Approximate weather using team name as city search"""
+    try:
+        # Simple geocoding via Open-Meteo
+        geo_url = "https://geocoding-api.open-meteo.com/v1/search"
+        geo_params = {"name": team_name, "count": 1, "language": "en", "format": "json"}
+        geo = requests.get(geo_url, params=geo_params, timeout=6).json()
+        
+        if not geo.get("results"):
+            return None
+        
+        lat = geo["results"][0]["latitude"]
+        lon = geo["results"][0]["longitude"]
+        
+        weather_url = "https://api.open-meteo.com/v1/forecast"
+        weather_params = {
+            "latitude": lat,
+            "longitude": lon,
+            "current": "temperature_2m,wind_speed_10m,weather_code",
+            "temperature_unit": "fahrenheit",
+            "wind_speed_unit": "mph"
+        }
+        w = requests.get(weather_url, params=weather_params, timeout=6).json()
+        current = w.get("current", {})
+        
+        return {
+            "temp": current.get("temperature_2m"),
+            "wind": current.get("wind_speed_10m")
+        }
+    except:
+        return None
+
 def best_odds(game):
     best = {
         "ml_home": None, "ml_away": None,
         "spread_home": None, "spread_away": None,
         "over": None, "under": None
     }
-    
     home = game["home_team"]
     away = game["away_team"]
     
@@ -79,7 +91,6 @@ def best_odds(game):
                     elif o["name"] == away:
                         if best["ml_away"] is None or o["price"] > best["ml_away"][0]:
                             best["ml_away"] = (o["price"], book["title"])
-            
             elif market["key"] == "spreads":
                 for o in market["outcomes"]:
                     point = o.get("point")
@@ -89,7 +100,6 @@ def best_odds(game):
                     elif o["name"] == away:
                         if best["spread_away"] is None or o["price"] > best["spread_away"][0]:
                             best["spread_away"] = (o["price"], point, book["title"])
-            
             elif market["key"] == "totals":
                 for o in market["outcomes"]:
                     point = o.get("point")
@@ -99,7 +109,6 @@ def best_odds(game):
                     elif o["name"] == "Under":
                         if best["under"] is None or o["price"] > best["under"][0]:
                             best["under"] = (o["price"], point, book["title"])
-    
     return best
 
 sport = st.selectbox("Choose sport", list(SPORTS.keys()))
@@ -107,9 +116,9 @@ sport = st.selectbox("Choose sport", list(SPORTS.keys()))
 data = get_odds(SPORTS[sport])
 
 if not data:
-    st.error("Could not load games. Try again in a minute.")
+    st.error("Could not load games.")
 else:
-    st.success(f"{len(data)} games • Best available odds")
+    st.success(f"{len(data)} games • Best odds + weather")
     
     for game in data:
         home = game["home_team"]
@@ -120,23 +129,27 @@ else:
         st.markdown(f"### @ {home}")
         st.caption(f"Start: {commence} UTC")
         
+        # Weather (approximate)
+        weather = get_weather_for_team(home)
+        if weather and weather.get("temp") is not None:
+            st.write(f"Weather (approx): **{weather['temp']}°F**, wind **{weather['wind']} mph**")
+        else:
+            st.caption("Weather unavailable")
+        
         b = best_odds(game)
         
-        # Moneyline
         st.markdown("**Moneyline**")
         if b["ml_away"]:
             st.write(f"{away}: **{b['ml_away'][0]}** ({b['ml_away'][1]})")
         if b["ml_home"]:
             st.write(f"{home}: **{b['ml_home'][0]}** ({b['ml_home'][1]})")
         
-        # Spread
         st.markdown("**Spread**")
         if b["spread_away"]:
             st.write(f"{away} {b['spread_away'][1]}: **{b['spread_away'][0]}** ({b['spread_away'][2]})")
         if b["spread_home"]:
             st.write(f"{home} {b['spread_home'][1]}: **{b['spread_home'][0]}** ({b['spread_home'][2]})")
         
-        # Total
         st.markdown("**Total**")
         if b["over"]:
             st.write(f"Over {b['over'][1]}: **{b['over'][0]}** ({b['over'][2]})")
