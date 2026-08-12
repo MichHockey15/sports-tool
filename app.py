@@ -1,9 +1,42 @@
 import streamlit as st
 import requests
 
-st.set_page_config(page_title="Sports Tool", layout="wide")
-st.title("My Personal Sports Tool")
-st.caption("NFL + College Football • Best Odds View")
+st.set_page_config(
+    page_title="Sports Tool",
+    layout="centered",          # better for phones
+    initial_sidebar_state="collapsed"
+)
+
+# Make text bigger and more readable on mobile
+st.markdown("""
+    <style>
+        .stApp {
+            max-width: 100%;
+        }
+        h1 {
+            font-size: 1.8rem !important;
+            margin-bottom: 0.3rem !important;
+        }
+        h3 {
+            font-size: 1.3rem !important;
+            margin-top: 1.2rem !important;
+            margin-bottom: 0.3rem !important;
+        }
+        p, div {
+            font-size: 1.05rem !important;
+        }
+        .stCaption {
+            font-size: 0.95rem !important;
+        }
+        .block-container {
+            padding-top: 1.5rem !important;
+            padding-bottom: 2rem !important;
+        }
+    </style>
+""", unsafe_allow_html=True)
+
+st.title("Sports Tool")
+st.caption("NFL + College Football • Best Odds")
 
 API_KEY = st.secrets["API_KEY"]
 
@@ -27,7 +60,6 @@ def get_odds(sport_key):
     return r.json()
 
 def best_odds(game):
-    """Find the best moneyline, spread, and total across all books"""
     best = {
         "ml_home": None, "ml_away": None,
         "spread_home": None, "spread_away": None,
@@ -72,47 +104,43 @@ def best_odds(game):
 
 sport = st.selectbox("Choose sport", list(SPORTS.keys()))
 
-if not API_KEY or "YOUR_REAL" in API_KEY:
-    st.warning("Put your real Odds API key in the code.")
+data = get_odds(SPORTS[sport])
+
+if not data:
+    st.error("Could not load games. Try again in a minute.")
 else:
-    data = get_odds(SPORTS[sport])
+    st.success(f"{len(data)} games • Best available odds")
     
-    if not data:
-        st.error("Could not load games.")
-    else:
-        st.success(f"{len(data)} upcoming games • Showing best available odds")
+    for game in data:
+        home = game["home_team"]
+        away = game["away_team"]
+        commence = game.get("commence_time", "")[:16].replace("T", " ")
         
-        for game in data:
-            home = game["home_team"]
-            away = game["away_team"]
-            commence = game.get("commence_time", "")[:16].replace("T", " ")
-            
-            st.markdown(f"### {away} @ {home}")
-            st.caption(f"Start: {commence} UTC")
-            
-            b = best_odds(game)
-            
-            col1, col2, col3 = st.columns(3)
-            
-            with col1:
-                st.write("**Best Moneyline**")
-                if b["ml_away"]:
-                    st.write(f"{away}: **{b['ml_away'][0]}** ({b['ml_away'][1]})")
-                if b["ml_home"]:
-                    st.write(f"{home}: **{b['ml_home'][0]}** ({b['ml_home'][1]})")
-            
-            with col2:
-                st.write("**Best Spread**")
-                if b["spread_away"]:
-                    st.write(f"{away} {b['spread_away'][1]}: **{b['spread_away'][0]}** ({b['spread_away'][2]})")
-                if b["spread_home"]:
-                    st.write(f"{home} {b['spread_home'][1]}: **{b['spread_home'][0]}** ({b['spread_home'][2]})")
-            
-            with col3:
-                st.write("**Best Total**")
-                if b["over"]:
-                    st.write(f"Over {b['over'][1]}: **{b['over'][0]}** ({b['over'][2]})")
-                if b["under"]:
-                    st.write(f"Under {b['under'][1]}: **{b['under'][0]}** ({b['under'][2]})")
-            
-            st.divider()
+        st.markdown(f"### {away}")
+        st.markdown(f"### @ {home}")
+        st.caption(f"Start: {commence} UTC")
+        
+        b = best_odds(game)
+        
+        # Moneyline
+        st.markdown("**Moneyline**")
+        if b["ml_away"]:
+            st.write(f"{away}: **{b['ml_away'][0]}** ({b['ml_away'][1]})")
+        if b["ml_home"]:
+            st.write(f"{home}: **{b['ml_home'][0]}** ({b['ml_home'][1]})")
+        
+        # Spread
+        st.markdown("**Spread**")
+        if b["spread_away"]:
+            st.write(f"{away} {b['spread_away'][1]}: **{b['spread_away'][0]}** ({b['spread_away'][2]})")
+        if b["spread_home"]:
+            st.write(f"{home} {b['spread_home'][1]}: **{b['spread_home'][0]}** ({b['spread_home'][2]})")
+        
+        # Total
+        st.markdown("**Total**")
+        if b["over"]:
+            st.write(f"Over {b['over'][1]}: **{b['over'][0]}** ({b['over'][2]})")
+        if b["under"]:
+            st.write(f"Under {b['under'][1]}: **{b['under'][0]}** ({b['under'][2]})")
+        
+        st.divider()
