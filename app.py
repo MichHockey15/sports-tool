@@ -17,7 +17,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("Sports Tool")
-st.caption("NFL + College Football • Best Odds + Weather")
+st.caption("NFL + College Football • Best Odds + Props + Weather")
 
 API_KEY = st.secrets["API_KEY"]
 
@@ -26,8 +26,11 @@ SPORTS = {
     "College Football": "americanfootball_ncaaf"
 }
 
+VIEW = st.radio("View", ["Game Odds", "Player Props"], horizontal=True)
+sport = st.selectbox("Sport", list(SPORTS.keys()))
+
 @st.cache_data(ttl=180)
-def get_odds(sport_key):
+def get_game_odds(sport_key):
     url = f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds"
     params = {
         "apiKey": API_KEY,
@@ -36,9 +39,21 @@ def get_odds(sport_key):
         "oddsFormat": "american"
     }
     r = requests.get(url, params=params, timeout=15)
-    if r.status_code != 200:
-        return None
-    return r.json()
+    return r.json() if r.status_code == 200 else None
+
+@st.cache_data(ttl=180)
+def get_player_props(sport_key):
+    # Common football player prop markets
+    markets = "player_pass_yds,player_rush_yds,player_reception_yds,player_pass_tds,player_rush_tds,player_receptions"
+    url = f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds"
+    params = {
+        "apiKey": API_KEY,
+        "regions": "us",
+        "markets": markets,
+        "oddsFormat": "american"
+    }
+    r = requests.get(url, params=params, timeout=15)
+    return r.json() if r.status_code == 200 else None
 
 def get_weather_for_team(team_name):
     try:
@@ -52,121 +67,112 @@ def get_weather_for_team(team_name):
                      "Longhorns", "Buckeyes", "Wolverines", "Nittany Lions", "Seminoles",
                      "Gators", "Volunteers", "Wildcats", "Hurricanes", "Trojans", "Bruins"]:
             clean_name = clean_name.replace(word, "").strip()
-
         clean_name = clean_name.replace("University of", "").replace("State", "").strip()
-
         if len(clean_name) < 3:
             clean_name = team_name
 
-        geo_url = "https://geocoding-api.open-meteo.com/v1/search"
-        geo_params = {"name": clean_name, "count": 1, "language": "en", "format": "json"}
-        geo = requests.get(geo_url, params=geo_params, timeout=6).json()
-
+        geo = requests.get(
+            "https://geocoding-api.open-meteo.com/v1/search",
+            params={"name": clean_name, "count": 1, "language": "en", "format": "json"},
+            timeout=6
+        ).json()
         if not geo.get("results"):
             return None
-
         lat = geo["results"][0]["latitude"]
         lon = geo["results"][0]["longitude"]
-
-        weather_url = "https://api.open-meteo.com/v1/forecast"
-        weather_params = {
-            "latitude": lat,
-            "longitude": lon,
-            "current": "temperature_2m,wind_speed_10m",
-            "temperature_unit": "fahrenheit",
-            "wind_speed_unit": "mph"
-        }
-        w = requests.get(weather_url, params=weather_params, timeout=6).json()
+        w = requests.get(
+            "https://api.open-meteo.com/v1/forecast",
+            params={
+                "latitude": lat, "longitude": lon,
+                "current": "temperature_2m,wind_speed_10m",
+                "temperature_unit": "fahrenheit", "wind_speed_unit": "mph"
+            },
+            timeout=6
+        ).json()
         current = w.get("current", {})
-
-        return {
-            "temp": current.get("temperature_2m"),
-            "wind": current.get("wind_speed_10m")
-        }
+        return {"temp": current.get("temperature_2m"), "wind": current.get("wind_speed_10m")}
     except Exception:
         return None
 
 def best_odds(game):
-    best = {
-        "ml_home": None, "ml_away": None,
-        "spread_home": None, "spread_away": None,
-        "over": None, "under": None
-    }
-    home = game["home_team"]
-    away = game["away_team"]
-
+    best = {"ml_home": None, "ml_away": None, "spread_home": None, "spread_away": None, "over": None, "under": None}
+    home, away = game["home_team"], game["away_team"]
     for book in game.get("bookmakers", []):
         for market in book.get("markets", []):
             if market["key"] == "h2h":
                 for o in market["outcomes"]:
-                    if o["name"] == home:
-                        if best["ml_home"] is None or o["price"] > best["ml_home"][0]:
-                            best["ml_home"] = (o["price"], book["title"])
-                    elif o["name"] == away:
-                        if best["ml_away"] is None or o["price"] > best["ml_away"][0]:
-                            best["ml_away"] = (o["price"], book["title"])
+                    if o["name"] == home and (best["ml_home"] is None or o["price"] > best["ml_home"][0]):
+                        best["ml_home"] = (o["price"], book["title"])
+                    elif o["name"] == away and (best["ml_away"] is None or o["price"] > best["ml_away"][0]):
+                        best["ml_away"] = (o["price"], book["title"])
             elif market["key"] == "spreads":
                 for o in market["outcomes"]:
                     point = o.get("point")
-                    if o["name"] == home:
-                        if best["spread_home"] is None or o["price"] > best["spread_home"][0]:
-                            best["spread_home"] = (o["price"], point, book["title"])
-                    elif o["name"] == away:
-                        if best["spread_away"] is None or o["price"] > best["spread_away"][0]:
-                            best["spread_away"] = (o["price"], point, book["title"])
+                    if o["name"] == home and (best["spread_home"] is None or o["price"] > best["spread_home"][0]):
+                        best["spread_home"] = (o["price"], point, book["title"])
+                    elif o["name"] == away and (best["spread_away"] is None or o["price"] > best["spread_away"][0]):
+                        best["spread_away"] = (o["price"], point, book["title"])
             elif market["key"] == "totals":
                 for o in market["outcomes"]:
                     point = o.get("point")
-                    if o["name"] == "Over":
-                        if best["over"] is None or o["price"] > best["over"][0]:
-                            best["over"] = (o["price"], point, book["title"])
-                    elif o["name"] == "Under":
-                        if best["under"] is None or o["price"] > best["under"][0]:
-                            best["under"] = (o["price"], point, book["title"])
+                    if o["name"] == "Over" and (best["over"] is None or o["price"] > best["over"][0]):
+                        best["over"] = (o["price"], point, book["title"])
+                    elif o["name"] == "Under" and (best["under"] is None or o["price"] > best["under"][0]):
+                        best["under"] = (o["price"], point, book["title"])
     return best
 
-sport = st.selectbox("Choose sport", list(SPORTS.keys()))
+# ========== MAIN DISPLAY ==========
+if VIEW == "Game Odds":
+    data = get_game_odds(SPORTS[sport])
+    if not data:
+        st.error("Could not load game odds.")
+    else:
+        st.success(f"{len(data)} games")
+        for game in data:
+            home, away = game["home_team"], game["away_team"]
+            commence = game.get("commence_time", "")[:16].replace("T", " ")
+            st.markdown(f"### {away}")
+            st.markdown(f"### @ {home}")
+            st.caption(f"Start: {commence} UTC")
 
-data = get_odds(SPORTS[sport])
+            weather = get_weather_for_team(home)
+            if weather and weather.get("temp") is not None:
+                st.write(f"Weather: **{weather['temp']}°F**, wind **{weather['wind']} mph**")
+            else:
+                st.caption("Weather unavailable")
 
-if not data:
-    st.error("Could not load games.")
-else:
-    st.success(f"{len(data)} games • Best odds + weather")
+            b = best_odds(game)
+            st.markdown("**Moneyline**")
+            if b["ml_away"]: st.write(f"{away}: **{b['ml_away'][0]}** ({b['ml_away'][1]})")
+            if b["ml_home"]: st.write(f"{home}: **{b['ml_home'][0]}** ({b['ml_home'][1]})")
+            st.markdown("**Spread**")
+            if b["spread_away"]: st.write(f"{away} {b['spread_away'][1]}: **{b['spread_away'][0]}** ({b['spread_away'][2]})")
+            if b["spread_home"]: st.write(f"{home} {b['spread_home'][1]}: **{b['spread_home'][0]}** ({b['spread_home'][2]})")
+            st.markdown("**Total**")
+            if b["over"]: st.write(f"Over {b['over'][1]}: **{b['over'][0]}** ({b['over'][2]})")
+            if b["under"]: st.write(f"Under {b['under'][1]}: **{b['under'][0]}** ({b['under'][2]})")
+            st.divider()
 
-    for game in data:
-        home = game["home_team"]
-        away = game["away_team"]
-        commence = game.get("commence_time", "")[:16].replace("T", " ")
-
-        st.markdown(f"### {away}")
-        st.markdown(f"### @ {home}")
-        st.caption(f"Start: {commence} UTC")
-
-        weather = get_weather_for_team(home)
-        if weather and weather.get("temp") is not None:
-            st.write(f"Weather (approx): **{weather['temp']}°F**, wind **{weather['wind']} mph**")
-        else:
-            st.caption("Weather unavailable")
-
-        b = best_odds(game)
-
-        st.markdown("**Moneyline**")
-        if b["ml_away"]:
-            st.write(f"{away}: **{b['ml_away'][0]}** ({b['ml_away'][1]})")
-        if b["ml_home"]:
-            st.write(f"{home}: **{b['ml_home'][0]}** ({b['ml_home'][1]})")
-
-        st.markdown("**Spread**")
-        if b["spread_away"]:
-            st.write(f"{away} {b['spread_away'][1]}: **{b['spread_away'][0]}** ({b['spread_away'][2]})")
-        if b["spread_home"]:
-            st.write(f"{home} {b['spread_home'][1]}: **{b['spread_home'][0]}** ({b['spread_home'][2]})")
-
-        st.markdown("**Total**")
-        if b["over"]:
-            st.write(f"Over {b['over'][1]}: **{b['over'][0]}** ({b['over'][2]})")
-        if b["under"]:
-            st.write(f"Under {b['under'][1]}: **{b['under'][0]}** ({b['under'][2]})")
-
-        st.divider()
+else:  # Player Props
+    data = get_player_props(SPORTS[sport])
+    if not data:
+        st.error("Could not load player props. (Coverage varies by sport and day)")
+    else:
+        st.success(f"Player props loaded for {len(data)} games")
+        for game in data:
+            home, away = game["home_team"], game["away_team"]
+            st.markdown(f"### {away} @ {home}")
+            
+            props_found = False
+            for book in game.get("bookmakers", []):
+                for market in book.get("markets", []):
+                    props_found = True
+                    market_name = market["key"].replace("player_", "").replace("_", " ").title()
+                    st.markdown(f"**{market_name}** ({book['title']})")
+                    for o in market["outcomes"]:
+                        point = o.get("point", "")
+                        st.write(f"{o['name']} {point}: **{o['price']}**")
+                    st.write("")  # small space
+            if not props_found:
+                st.caption("No player props available for this game yet")
+            st.divider()
