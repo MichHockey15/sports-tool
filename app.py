@@ -10,15 +10,16 @@ st.set_page_config(
 
 st.markdown("""
     <style>
-        h1 { font-size: 1.8rem !important; }
-        h3 { font-size: 1.25rem !important; margin-top: 1.1rem !important; }
-        p, div { font-size: 1.05rem !important; }
-        .block-container { padding-top: 1.2rem !important; }
+        h1 { font-size: 1.75rem !important; margin-bottom: 0.2rem !important; }
+        h3 { font-size: 1.2rem !important; margin-top: 0.8rem !important; margin-bottom: 0.15rem !important; }
+        p, div { font-size: 1.02rem !important; }
+        .block-container { padding-top: 1rem !important; padding-bottom: 2rem !important; }
+        .stCaption { font-size: 0.9rem !important; }
     </style>
 """, unsafe_allow_html=True)
 
 st.title("Sports Tool")
-st.caption("Best Odds + Weather • Personal Use")
+st.caption("Best Odds + Weather")
 
 API_KEY = st.secrets["API_KEY"]
 
@@ -49,25 +50,23 @@ def get_game_odds(sport_key):
 def get_weather_for_team(team_name):
     try:
         clean_name = team_name
-        # Common suffixes to strip
-        for word in ["Chiefs", "Eagles", "Cowboys", "49ers", "Packers", "Bears", "Lions", "Vikings",
-                     "Saints", "Buccaneers", "Panthers", "Falcons", "Ravens", "Steelers", "Browns",
-                     "Bengals", "Bills", "Dolphins", "Jets", "Patriots", "Chargers", "Raiders",
-                     "Broncos", "Colts", "Jaguars", "Titans", "Texans", "Commanders", "Giants",
-                     "Cardinals", "Seahawks", "Rams", "Lakers", "Celtics", "Warriors", "Bucks",
-                     "Nets", "Heat", "Suns", "Nuggets", "Mavericks", "Clippers", "Sixers",
-                     "Knicks", "Bulls", "Hawks", "Raptors", "Jazz", "Thunder", "Timberwolves",
-                     "Pelicans", "Kings", "Spurs", "Rockets", "Pacers", "Magic", "Hornets",
-                     "Pistons", "Wizards", "Grizzlies", "Blazers", "Maple Leafs", "Canadiens",
-                     "Bruins", "Rangers", "Penguins", "Capitals", "Lightning", "Panthers",
-                     "Hurricanes", "Devils", "Islanders", "Flyers", "Blue Jackets", "Red Wings",
-                     "Sabres", "Senators", "Canucks", "Flames", "Oilers", "Kraken", "Jets",
-                     "Wild", "Blackhawks", "Blues", "Predators", "Stars", "Avalanche", "Golden Knights",
-                     "Ducks", "Sharks", "Kings", "Coyotes", "Yankees", "Red Sox", "Dodgers",
-                     "Giants", "Cubs", "Mets", "Cardinals", "Braves", "Astros", "Phillies",
-                     "Padres", "Mariners", "Rangers", "Twins", "Guardians", "White Sox", "Tigers",
-                     "Royals", "Orioles", "Rays", "Blue Jays", "Angels", "Athletics", "Rockies",
-                     "Diamondbacks", "Pirates", "Reds", "Brewers", "Nationals", "Marlins"]:
+        suffixes = ["Chiefs","Eagles","Cowboys","49ers","Packers","Bears","Lions","Vikings","Saints",
+                    "Buccaneers","Panthers","Falcons","Ravens","Steelers","Browns","Bengals","Bills",
+                    "Dolphins","Jets","Patriots","Chargers","Raiders","Broncos","Colts","Jaguars",
+                    "Titans","Texans","Commanders","Giants","Cardinals","Seahawks","Rams","Lakers",
+                    "Celtics","Warriors","Bucks","Nets","Heat","Suns","Nuggets","Mavericks","Clippers",
+                    "Sixers","Knicks","Bulls","Hawks","Raptors","Jazz","Thunder","Timberwolves",
+                    "Pelicans","Kings","Spurs","Rockets","Pacers","Magic","Hornets","Pistons",
+                    "Wizards","Grizzlies","Blazers","Maple Leafs","Canadiens","Bruins","Rangers",
+                    "Penguins","Capitals","Lightning","Hurricanes","Devils","Islanders","Flyers",
+                    "Blue Jackets","Red Wings","Sabres","Senators","Canucks","Flames","Oilers",
+                    "Kraken","Jets","Wild","Blackhawks","Blues","Predators","Stars","Avalanche",
+                    "Golden Knights","Ducks","Sharks","Coyotes","Yankees","Red Sox","Dodgers",
+                    "Cubs","Mets","Cardinals","Braves","Astros","Phillies","Padres","Mariners",
+                    "Twins","Guardians","White Sox","Tigers","Royals","Orioles","Rays","Blue Jays",
+                    "Angels","Athletics","Rockies","Diamondbacks","Pirates","Reds","Brewers",
+                    "Nationals","Marlins"]
+        for word in suffixes:
             clean_name = clean_name.replace(word, "").strip()
         clean_name = clean_name.replace("University of", "").replace("State", "").strip()
         if len(clean_name) < 3:
@@ -126,9 +125,12 @@ def best_odds(game):
 data = get_game_odds(SPORTS[sport])
 
 if not data:
-    st.error("Could not load games. (Some sports may be out of season or have limited coverage)")
+    st.error("Could not load games. Some sports may be out of season.")
 else:
     now = datetime.now(timezone.utc)
+    # Eastern Time offset (handles EDT/EST roughly as -4 hours for summer)
+    eastern_offset = timedelta(hours=-4)
+    
     filtered = []
     for game in data:
         try:
@@ -139,46 +141,47 @@ else:
             filtered.append((now, game))
     
     filtered.sort(key=lambda x: x[0])
-    
-    st.success(f"{len(filtered)} games shown")
+    st.success(f"{len(filtered)} games")
     
     for start, game in filtered:
         home = game["home_team"]
         away = game["away_team"]
-        start_str = start.strftime("%b %d, %I:%M %p UTC")
+        
+        # Convert to Eastern Time for display
+        start_et = start + eastern_offset
+        start_str = start_et.strftime("%a %b %d • %I:%M %p ET")
         
         st.markdown(f"### {away}")
-        st.markdown(f"### @ {home}")
-        st.caption(f"Start: {start_str}")
+        st.markdown(f"**@ {home}**")
+        st.caption(start_str)
         
-        # Weather (skip for UFC – not useful)
         if sport != "UFC":
             weather = get_weather_for_team(home)
             if weather and weather.get("temp") is not None:
-                st.write(f"Weather: **{weather['temp']}°F**, wind **{weather['wind']} mph**")
+                st.write(f"🌤 **{weather['temp']}°F** · Wind {weather['wind']} mph")
             else:
                 st.caption("Weather unavailable")
         
         b = best_odds(game)
         
+        st.write("")  # small spacer
         st.markdown("**Moneyline**")
         if b["ml_away"]:
-            st.write(f"{away}: **{b['ml_away'][0]}** ({b['ml_away'][1]})")
+            st.write(f"{away}: **{b['ml_away'][0]}**  ·  {b['ml_away'][1]}")
         if b["ml_home"]:
-            st.write(f"{home}: **{b['ml_home'][0]}** ({b['ml_home'][1]})")
+            st.write(f"{home}: **{b['ml_home'][0]}**  ·  {b['ml_home'][1]}")
         
-        # Spreads & totals are less relevant for UFC
         if sport != "UFC":
             st.markdown("**Spread**")
             if b["spread_away"]:
-                st.write(f"{away} {b['spread_away'][1]}: **{b['spread_away'][0]}** ({b['spread_away'][2]})")
+                st.write(f"{away} {b['spread_away'][1]}: **{b['spread_away'][0]}**  ·  {b['spread_away'][2]}")
             if b["spread_home"]:
-                st.write(f"{home} {b['spread_home'][1]}: **{b['spread_home'][0]}** ({b['spread_home'][2]})")
+                st.write(f"{home} {b['spread_home'][1]}: **{b['spread_home'][0]}**  ·  {b['spread_home'][2]}")
             
             st.markdown("**Total**")
             if b["over"]:
-                st.write(f"Over {b['over'][1]}: **{b['over'][0]}** ({b['over'][2]})")
+                st.write(f"Over {b['over'][1]}: **{b['over'][0]}**  ·  {b['over'][2]}")
             if b["under"]:
-                st.write(f"Under {b['under'][1]}: **{b['under'][0]}** ({b['under'][2]})")
+                st.write(f"Under {b['under'][1]}: **{b['under'][0]}**  ·  {b['under'][2]}")
         
         st.divider()
