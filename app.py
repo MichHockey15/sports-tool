@@ -41,11 +41,28 @@ def get_odds(sport_key):
     return r.json()
 
 def get_weather_for_team(team_name):
-    """Approximate weather using team name as city search"""
+    """Approximate weather by cleaning the team name first"""
     try:
-        # Simple geocoding via Open-Meteo
+        # Clean the name: remove common mascot words
+        clean_name = team_name
+        for word in ["Chiefs", "Eagles", "Cowboys", "49ers", "Packers", "Bears", 
+                     "Lions", "Vikings", "Saints", "Buccaneers", "Panthers", "Falcons",
+                     "Ravens", "Steelers", "Browns", "Bengals", "Bills", "Dolphins",
+                     "Jets", "Patriots", "Chargers", "Raiders", "Broncos", "Colts",
+                     "Jaguars", "Titans", "Texans", "Commanders", "Giants", "Cardinals",
+                     "Seahawks", "Rams", "Bulldogs", "Tigers", "Crimson Tide", "Sooners",
+                     "Longhorns", "Buckeyes", "Wolverines", "Nittany Lions", "Seminoles",
+                     "Gators", "Volunteers", "Wildcats", "Hurricanes", "Trojans", "Bruins"]:
+            clean_name = clean_name.replace(word, "").strip()
+        
+        # Also remove "University of" / "State" noise
+        clean_name = clean_name.replace("University of", "").replace("State", "").strip()
+        
+        if len(clean_name) < 3:
+            clean_name = team_name  # fallback
+        
         geo_url = "https://geocoding-api.open-meteo.com/v1/search"
-        geo_params = {"name": team_name, "count": 1, "language": "en", "format": "json"}
+        geo_params = {"name": clean_name, "count": 1, "language": "en", "format": "json"}
         geo = requests.get(geo_url, params=geo_params, timeout=6).json()
         
         if not geo.get("results"):
@@ -58,12 +75,19 @@ def get_weather_for_team(team_name):
         weather_params = {
             "latitude": lat,
             "longitude": lon,
-            "current": "temperature_2m,wind_speed_10m,weather_code",
+            "current": "temperature_2m,wind_speed_10m",
             "temperature_unit": "fahrenheit",
             "wind_speed_unit": "mph"
         }
         w = requests.get(weather_url, params=weather_params, timeout=6).json()
         current = w.get("current", {})
+        
+        return {
+            "temp": current.get("temperature_2m"),
+            "wind": current.get("wind_speed_10m")
+        }
+    except:
+        return None
         
         return {
             "temp": current.get("temperature_2m"),
