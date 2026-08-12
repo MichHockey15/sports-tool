@@ -41,11 +41,9 @@ def get_odds(sport_key):
     return r.json()
 
 def get_weather_for_team(team_name):
-    """Approximate weather by cleaning the team name first"""
     try:
-        # Clean the name: remove common mascot words
         clean_name = team_name
-        for word in ["Chiefs", "Eagles", "Cowboys", "49ers", "Packers", "Bears", 
+        for word in ["Chiefs", "Eagles", "Cowboys", "49ers", "Packers", "Bears",
                      "Lions", "Vikings", "Saints", "Buccaneers", "Panthers", "Falcons",
                      "Ravens", "Steelers", "Browns", "Bengals", "Bills", "Dolphins",
                      "Jets", "Patriots", "Chargers", "Raiders", "Broncos", "Colts",
@@ -54,23 +52,22 @@ def get_weather_for_team(team_name):
                      "Longhorns", "Buckeyes", "Wolverines", "Nittany Lions", "Seminoles",
                      "Gators", "Volunteers", "Wildcats", "Hurricanes", "Trojans", "Bruins"]:
             clean_name = clean_name.replace(word, "").strip()
-        
-        # Also remove "University of" / "State" noise
+
         clean_name = clean_name.replace("University of", "").replace("State", "").strip()
-        
+
         if len(clean_name) < 3:
-            clean_name = team_name  # fallback
-        
+            clean_name = team_name
+
         geo_url = "https://geocoding-api.open-meteo.com/v1/search"
         geo_params = {"name": clean_name, "count": 1, "language": "en", "format": "json"}
         geo = requests.get(geo_url, params=geo_params, timeout=6).json()
-        
+
         if not geo.get("results"):
             return None
-        
+
         lat = geo["results"][0]["latitude"]
         lon = geo["results"][0]["longitude"]
-        
+
         weather_url = "https://api.open-meteo.com/v1/forecast"
         weather_params = {
             "latitude": lat,
@@ -81,19 +78,12 @@ def get_weather_for_team(team_name):
         }
         w = requests.get(weather_url, params=weather_params, timeout=6).json()
         current = w.get("current", {})
-        
+
         return {
             "temp": current.get("temperature_2m"),
             "wind": current.get("wind_speed_10m")
         }
-    except:
-        return None
-        
-        return {
-            "temp": current.get("temperature_2m"),
-            "wind": current.get("wind_speed_10m")
-        }
-    except:
+    except Exception:
         return None
 
 def best_odds(game):
@@ -104,7 +94,7 @@ def best_odds(game):
     }
     home = game["home_team"]
     away = game["away_team"]
-    
+
     for book in game.get("bookmakers", []):
         for market in book.get("markets", []):
             if market["key"] == "h2h":
@@ -143,41 +133,40 @@ if not data:
     st.error("Could not load games.")
 else:
     st.success(f"{len(data)} games • Best odds + weather")
-    
+
     for game in data:
         home = game["home_team"]
         away = game["away_team"]
         commence = game.get("commence_time", "")[:16].replace("T", " ")
-        
+
         st.markdown(f"### {away}")
         st.markdown(f"### @ {home}")
         st.caption(f"Start: {commence} UTC")
-        
-        # Weather (approximate)
+
         weather = get_weather_for_team(home)
         if weather and weather.get("temp") is not None:
             st.write(f"Weather (approx): **{weather['temp']}°F**, wind **{weather['wind']} mph**")
         else:
             st.caption("Weather unavailable")
-        
+
         b = best_odds(game)
-        
+
         st.markdown("**Moneyline**")
         if b["ml_away"]:
             st.write(f"{away}: **{b['ml_away'][0]}** ({b['ml_away'][1]})")
         if b["ml_home"]:
             st.write(f"{home}: **{b['ml_home'][0]}** ({b['ml_home'][1]})")
-        
+
         st.markdown("**Spread**")
         if b["spread_away"]:
             st.write(f"{away} {b['spread_away'][1]}: **{b['spread_away'][0]}** ({b['spread_away'][2]})")
         if b["spread_home"]:
             st.write(f"{home} {b['spread_home'][1]}: **{b['spread_home'][0]}** ({b['spread_home'][2]})")
-        
+
         st.markdown("**Total**")
         if b["over"]:
             st.write(f"Over {b['over'][1]}: **{b['over'][0]}** ({b['over'][2]})")
         if b["under"]:
             st.write(f"Under {b['under'][1]}: **{b['under'][0]}** ({b['under'][2]})")
-        
+
         st.divider()
