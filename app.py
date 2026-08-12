@@ -43,8 +43,8 @@ def get_game_odds(sport_key):
 
 @st.cache_data(ttl=180)
 def get_player_props(sport_key):
-    # Common football player prop markets
-    markets = "player_pass_yds,player_rush_yds,player_reception_yds,player_pass_tds,player_rush_tds,player_receptions"
+    # Start with fewer, more commonly available markets
+    markets = "player_pass_yds,player_rush_yds,player_reception_yds"
     url = f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds"
     params = {
         "apiKey": API_KEY,
@@ -53,7 +53,11 @@ def get_player_props(sport_key):
         "oddsFormat": "american"
     }
     r = requests.get(url, params=params, timeout=15)
-    return r.json() if r.status_code == 200 else None
+    if r.status_code != 200:
+        return None
+    data = r.json()
+    # Only keep games that actually have bookmakers with markets
+    return [g for g in data if g.get("bookmakers")]
 
 def get_weather_for_team(team_name):
     try:
@@ -156,7 +160,7 @@ if VIEW == "Game Odds":
 else:  # Player Props
     data = get_player_props(SPORTS[sport])
     if not data:
-        st.error("Could not load player props. (Coverage varies by sport and day)")
+        st.warning("No player props available right now. This is common for College Football or when books haven’t posted lines yet. Try NFL, or check again closer to game time.")
     else:
         st.success(f"Player props loaded for {len(data)} games")
         for game in data:
