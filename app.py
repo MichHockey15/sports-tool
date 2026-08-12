@@ -18,13 +18,17 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("Sports Tool")
-st.caption("NFL + College Football • Best Odds + Weather")
+st.caption("Best Odds + Weather • Personal Use")
 
 API_KEY = st.secrets["API_KEY"]
 
 SPORTS = {
     "NFL": "americanfootball_nfl",
-    "College Football": "americanfootball_ncaaf"
+    "College Football": "americanfootball_ncaaf",
+    "NBA": "basketball_nba",
+    "NHL": "icehockey_nhl",
+    "MLB": "baseball_mlb",
+    "UFC": "mma_mixed_martial_arts"
 }
 
 sport = st.selectbox("Sport", list(SPORTS.keys()))
@@ -45,14 +49,25 @@ def get_game_odds(sport_key):
 def get_weather_for_team(team_name):
     try:
         clean_name = team_name
-        for word in ["Chiefs", "Eagles", "Cowboys", "49ers", "Packers", "Bears",
-                     "Lions", "Vikings", "Saints", "Buccaneers", "Panthers", "Falcons",
-                     "Ravens", "Steelers", "Browns", "Bengals", "Bills", "Dolphins",
-                     "Jets", "Patriots", "Chargers", "Raiders", "Broncos", "Colts",
-                     "Jaguars", "Titans", "Texans", "Commanders", "Giants", "Cardinals",
-                     "Seahawks", "Rams", "Bulldogs", "Tigers", "Crimson Tide", "Sooners",
-                     "Longhorns", "Buckeyes", "Wolverines", "Nittany Lions", "Seminoles",
-                     "Gators", "Volunteers", "Wildcats", "Hurricanes", "Trojans", "Bruins"]:
+        # Common suffixes to strip
+        for word in ["Chiefs", "Eagles", "Cowboys", "49ers", "Packers", "Bears", "Lions", "Vikings",
+                     "Saints", "Buccaneers", "Panthers", "Falcons", "Ravens", "Steelers", "Browns",
+                     "Bengals", "Bills", "Dolphins", "Jets", "Patriots", "Chargers", "Raiders",
+                     "Broncos", "Colts", "Jaguars", "Titans", "Texans", "Commanders", "Giants",
+                     "Cardinals", "Seahawks", "Rams", "Lakers", "Celtics", "Warriors", "Bucks",
+                     "Nets", "Heat", "Suns", "Nuggets", "Mavericks", "Clippers", "Sixers",
+                     "Knicks", "Bulls", "Hawks", "Raptors", "Jazz", "Thunder", "Timberwolves",
+                     "Pelicans", "Kings", "Spurs", "Rockets", "Pacers", "Magic", "Hornets",
+                     "Pistons", "Wizards", "Grizzlies", "Blazers", "Maple Leafs", "Canadiens",
+                     "Bruins", "Rangers", "Penguins", "Capitals", "Lightning", "Panthers",
+                     "Hurricanes", "Devils", "Islanders", "Flyers", "Blue Jackets", "Red Wings",
+                     "Sabres", "Senators", "Canucks", "Flames", "Oilers", "Kraken", "Jets",
+                     "Wild", "Blackhawks", "Blues", "Predators", "Stars", "Avalanche", "Golden Knights",
+                     "Ducks", "Sharks", "Kings", "Coyotes", "Yankees", "Red Sox", "Dodgers",
+                     "Giants", "Cubs", "Mets", "Cardinals", "Braves", "Astros", "Phillies",
+                     "Padres", "Mariners", "Rangers", "Twins", "Guardians", "White Sox", "Tigers",
+                     "Royals", "Orioles", "Rays", "Blue Jays", "Angels", "Athletics", "Rockies",
+                     "Diamondbacks", "Pirates", "Reds", "Brewers", "Nationals", "Marlins"]:
             clean_name = clean_name.replace(word, "").strip()
         clean_name = clean_name.replace("University of", "").replace("State", "").strip()
         if len(clean_name) < 3:
@@ -111,7 +126,7 @@ def best_odds(game):
 data = get_game_odds(SPORTS[sport])
 
 if not data:
-    st.error("Could not load games.")
+    st.error("Could not load games. (Some sports may be out of season or have limited coverage)")
 else:
     now = datetime.now(timezone.utc)
     filtered = []
@@ -136,11 +151,13 @@ else:
         st.markdown(f"### @ {home}")
         st.caption(f"Start: {start_str}")
         
-        weather = get_weather_for_team(home)
-        if weather and weather.get("temp") is not None:
-            st.write(f"Weather: **{weather['temp']}°F**, wind **{weather['wind']} mph**")
-        else:
-            st.caption("Weather unavailable")
+        # Weather (skip for UFC – not useful)
+        if sport != "UFC":
+            weather = get_weather_for_team(home)
+            if weather and weather.get("temp") is not None:
+                st.write(f"Weather: **{weather['temp']}°F**, wind **{weather['wind']} mph**")
+            else:
+                st.caption("Weather unavailable")
         
         b = best_odds(game)
         
@@ -150,16 +167,18 @@ else:
         if b["ml_home"]:
             st.write(f"{home}: **{b['ml_home'][0]}** ({b['ml_home'][1]})")
         
-        st.markdown("**Spread**")
-        if b["spread_away"]:
-            st.write(f"{away} {b['spread_away'][1]}: **{b['spread_away'][0]}** ({b['spread_away'][2]})")
-        if b["spread_home"]:
-            st.write(f"{home} {b['spread_home'][1]}: **{b['spread_home'][0]}** ({b['spread_home'][2]})")
-        
-        st.markdown("**Total**")
-        if b["over"]:
-            st.write(f"Over {b['over'][1]}: **{b['over'][0]}** ({b['over'][2]})")
-        if b["under"]:
-            st.write(f"Under {b['under'][1]}: **{b['under'][0]}** ({b['under'][2]})")
+        # Spreads & totals are less relevant for UFC
+        if sport != "UFC":
+            st.markdown("**Spread**")
+            if b["spread_away"]:
+                st.write(f"{away} {b['spread_away'][1]}: **{b['spread_away'][0]}** ({b['spread_away'][2]})")
+            if b["spread_home"]:
+                st.write(f"{home} {b['spread_home'][1]}: **{b['spread_home'][0]}** ({b['spread_home'][2]})")
+            
+            st.markdown("**Total**")
+            if b["over"]:
+                st.write(f"Over {b['over'][1]}: **{b['over'][0]}** ({b['over'][2]})")
+            if b["under"]:
+                st.write(f"Under {b['under'][1]}: **{b['under'][0]}** ({b['under'][2]})")
         
         st.divider()
